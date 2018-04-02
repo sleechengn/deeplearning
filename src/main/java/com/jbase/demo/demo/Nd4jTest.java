@@ -25,8 +25,8 @@ public class Nd4jTest {
                 {0.3, 0.4, 0.5, 0.7}
         }));
         Variable y = new Variable(Nd4j.create(new double[][]{
-                {1, 0.5},
-                {1, 1}
+                {1, 0},
+                {0, 1}
         }));
 
         Toolkit tool = new Toolkit();
