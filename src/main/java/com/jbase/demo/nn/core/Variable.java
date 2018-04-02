@@ -4,9 +4,7 @@ import lombok.*;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
-
-import static cn.redguest.jbase.ai.nn.core.Calc.*;
-
+import static com.jbase.demo.nn.core.Calc.*;
 import java.util.function.Consumer;
 
 /**
