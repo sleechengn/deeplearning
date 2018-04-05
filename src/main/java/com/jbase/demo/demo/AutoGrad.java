@@ -25,6 +25,9 @@ public class AutoGrad {
         //例子二模块化的
         NNModule nn = new NNModule();
         for (int i = 0; i < 100001; i++) {
+            if(i % 1000 == 0) {
+                System.out.println("epoch:" + i /1000);
+            }
             nn.train(x, y);
         }
         Variable predict = nn.forward(new Variable(Nd4j.create(new double[]{0.3, 0.4, 0.5, 0.69})));

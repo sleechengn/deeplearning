@@ -2,7 +2,6 @@ package com.jbase.demo.demo;
 
 import com.jbase.demo.nn.core.Toolkit;
 import com.jbase.demo.nn.core.Variable;
-import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 
 public class NNModule {
@@ -28,10 +27,12 @@ public class NNModule {
         out = out.mean();
         tool.grad2zero(out);
         tool.backward(out);
-        ((INDArray) layer1weights.data).addi(((INDArray) layer1weights.grad).mul(-0.1));
-        ((INDArray) layer1bias.data).addi(((INDArray) layer1bias.grad).mul(-0.1));
-        ((INDArray) layer2weights.data).addi(((INDArray) layer2weights.grad).mul(-0.1));
-        ((INDArray) layer2bias.data).addi(((INDArray) layer2bias.grad).mul(-0.1));
+
+        //权重自身调整，减梯度乘学习率
+        layer1weights.data.tensor.subi(layer1weights.grad.tensor.mul(-0.1));
+        layer1bias.data.tensor.subi(layer1bias.grad.tensor.mul(-0.1));
+        layer2weights.data.tensor.subi(layer2weights.grad.tensor.mul(-0.1));
+        layer2bias.data.tensor.subi(layer2bias.grad.tensor.mul(-0.1));
     }
 
     public Variable forward(Variable x) {
