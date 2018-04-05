@@ -8,7 +8,7 @@ import org.nd4j.linalg.factory.Nd4j;
  * Created by lee on 2018/3/27.
  */
 @Slf4j
-public class Nd4jTest {
+public class AutoGrad {
 
     public static void main(String[] arguments) {
 
