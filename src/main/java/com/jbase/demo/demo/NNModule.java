@@ -26,7 +26,7 @@ public class NNModule {
         out = out.sub(y);
         out = out.square();
         out = out.mean();
-        tool.zeroGrad(out);
+        tool.grad2zero(out);
         tool.backward(out);
         ((INDArray) layer1weights.data).addi(((INDArray) layer1weights.grad).mul(-0.1));
         ((INDArray) layer1bias.data).addi(((INDArray) layer1bias.grad).mul(-0.1));

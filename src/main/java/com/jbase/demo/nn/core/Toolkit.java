@@ -3,7 +3,9 @@ package com.jbase.demo.nn.core;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
-import static com.jbase.demo.nn.core.Calc.*;
+
+import static cn.redguest.jbase.ai.nn.core.Calc.*;
+
 import java.util.LinkedList;
 import java.util.List;
 
@@ -12,21 +14,20 @@ import java.util.List;
  */
 public class Toolkit {
 
-    public void zeroGrad(Variable variable) {
-        variable.applyTreeOperation(var -> {
+    public void grad2zero(Variable variable) {
+        variable.backwardTreeOperation(var -> {
             var.setBackward(0);
-            if (INDArray.class.isInstance(var.data)) {
-                var.setGrad(Nd4j.zeros(((INDArray) var.data).shape()));
+            if (var.data.type > Tensor.SCALAR_TYPE) {
+                var.setGrad(new Tensor(Nd4j.zeros(var.data.tensor.shape())));
             }
-            if (Double.class.isInstance(var.data)) {
-                var.setGrad(Double.valueOf(0));
+            if (var.data.type == Tensor.SCALAR_TYPE) {
+                var.setGrad(new Tensor(Double.valueOf(0)));
             }
         });
     }
 
     public void backward(Variable variable) {
-        if (Double.class.isInstance(variable.data)) {
-
+        if (variable.data.type == Tensor.SCALAR_TYPE) {
             //变量参与运算计数
             LinkedList<Variable> leaveVars = new LinkedList<>();
             leaveVars.add(variable);
@@ -34,7 +35,6 @@ public class Toolkit {
                 Variable current = leaveVars.removeFirst();
                 if (current.backward > 0) {
                     current.backward++;
-                    continue;
                 } else {
                     current.backward++;
                     if (current.getDependencies() != null && current.getDependencies().length > 0) {
@@ -46,7 +46,7 @@ public class Toolkit {
                 }
             }
 
-            variable.setGrad(1D);
+            variable.setGrad(new Tensor(1));
             --variable.backward;
             LinkedList<Variable> variables = new LinkedList<>();    //这里一定是需要往后面计算导数的
             variables.add(variable);
@@ -56,202 +56,221 @@ public class Toolkit {
                     case Add: {
                         Variable x = current.dependencies[0];
                         Variable y = current.dependencies[1];
-                        if (INDArray.class.isInstance(current.data)) {
-                            x.grad = ((INDArray) x.grad).add((INDArray) current.grad);
-                            y.grad = ((INDArray) y.grad).add((INDArray) current.grad);
+                        if (current.data.type > Tensor.SCALAR_TYPE) {
+                            x.grad = new Tensor(x.grad.tensor.add(current.grad.tensor));
+                            y.grad = new Tensor(y.grad.tensor.add(current.grad.tensor));
                             if (--x.backward == 0) {
                                 variables.add(x);
                             }
                             if (--y.backward == 0) {
                                 variables.add(y);
                             }
-                        }
-                        if (Double.class.isInstance(current.data)) {
-                            x.grad = ((Double) x.grad) + ((Double) current.grad);
-                            y.grad = ((Double) y.grad) + ((Double) current.grad);
+                        } else if (current.data.type == Tensor.SCALAR_TYPE) {
+                            x.grad = new Tensor(x.grad.scalar + current.grad.scalar);
+                            y.grad = new Tensor(y.grad.scalar + current.grad.scalar);
                             if (--x.backward == 0) {
                                 variables.add(x);
                             }
                             if (--y.backward == 0) {
                                 variables.add(y);
                             }
+                        } else {
+                            throw new IllegalStateException("不支持");
                         }
                     }
                     break;
                     case Sub: {
                         Variable x = current.dependencies[0];
                         Variable y = current.dependencies[1];
-                        if (Double.class.isInstance(current.data)) {
-                            x.grad = (Double) x.grad + (Double) current.grad;
-                            y.grad = (Double) y.grad - 1 * (Double) current.grad;
+                        if (current.data.type == Tensor.SCALAR_TYPE) {
+                            x.grad = new Tensor(x.grad.scalar + current.grad.scalar);
+                            y.grad = new Tensor(y.grad.scalar - 1 * current.grad.scalar);
                             if (--x.backward == 0) {
                                 variables.add(x);
                             }
                             if (--y.backward == 0) {
                                 variables.add(y);
                             }
-                        }
-                        if (INDArray.class.isInstance(current.data)) {
-                            x.grad = ((INDArray) x.grad).add((INDArray) current.grad);
-                            y.grad = ((INDArray) y.grad).add(((INDArray) current.grad).mul(-1));
+                        } else if (current.data.type > Tensor.SCALAR_TYPE) {
+                            x.grad = new Tensor(x.grad.tensor.add(current.grad.tensor));
+                            y.grad = new Tensor(y.grad.tensor.add(current.grad.tensor.mul(-1)));
                             if (--x.backward == 0) {
                                 variables.add(x);
                             }
                             if (--y.backward == 0) {
                                 variables.add(y);
                             }
+                        } else {
+                            throw new IllegalStateException("不支持");
                         }
                     }
                     break;
                     case Mean: {
                         Variable x = current.dependencies[0];
-                        if (Double.class.isInstance(current.data)) {
-                            if (INDArray.class.isInstance(x.data)) {
-                                INDArray xM = (INDArray) x.data;
+                        if (current.data.type == Tensor.SCALAR_TYPE) {
+                            if (x.data.type > Tensor.SCALAR_TYPE) {
+                                INDArray x_data = x.data.tensor;
                                 List<Integer> shape = new LinkedList<>();
-                                int[] shapeOfXM = xM.shape();
-                                for (int i = 0; i < shapeOfXM.length; i++) {
-                                    shape.add(shapeOfXM[i]);
+                                int[] x_data_shape = x_data.shape();
+                                for (int i = 0; i < x_data_shape.length; i++) {
+                                    shape.add(x_data_shape[i]);
                                 }
                                 int product = shape.stream().reduce((a, b) -> a * b).get();
-                                x.grad = ((INDArray) x.grad).add(Nd4j.ones(shapeOfXM).div(product).mul(((Double) current.grad)));
+                                x.grad = new Tensor(x.grad.tensor.add(Nd4j.ones(x_data_shape).div(product).mul((current.grad.scalar))));
                                 if (--x.backward == 0) {
                                     variables.add(x);
                                 }
-                            }
-                            if (Double.class.isInstance(x.data)) {
-                                x.grad = (Double) x.grad + (Double) current.grad;
+                            } else if (x.data.type == Tensor.SCALAR_TYPE) {
+                                x.grad = new Tensor(x.grad.scalar + current.grad.scalar);
                                 if (--x.backward == 0) {
                                     variables.add(x);
                                 }
+                            } else {
+                                throw new IllegalStateException("不支持的类型");
                             }
+                        } else {
+                            throw new IllegalStateException("不支持的类型");
                         }
                     }
                     break;
                     case Sum: {
                         Variable x = current.dependencies[0];
-                        if (Double.class.isInstance(current.data)) {
-                            if (INDArray.class.isInstance(x.data)) {
-                                INDArray xM = (INDArray) x.data;
-                                int[] shapeOfXM = xM.shape();
-                                x.grad = ((INDArray) x.grad).add(Nd4j.ones(shapeOfXM).mul(((Double) current.grad)));
+                        if (current.data.type == Tensor.SCALAR_TYPE) {
+                            if (x.data.type > Tensor.SCALAR_TYPE) {
+                                INDArray x_data = x.data.tensor;
+                                int[] x_data_shape = x_data.shape();
+                                x.grad = new Tensor(x.grad.tensor.add(Nd4j.ones(x_data_shape).mul(current.grad.scalar)));
                                 if (--x.backward == 0) {
                                     variables.add(x);
                                 }
-                            }
-                            if (Double.class.isInstance(x.data)) {
-                                x.grad = (Double) x.grad + (Double) current.grad;
+                            } else if (x.data.type == Tensor.SCALAR_TYPE) {
+                                x.grad = new Tensor(x.grad.scalar + current.grad.scalar);
                                 if (--x.backward == 0) {
                                     variables.add(x);
                                 }
-                            }
+                            } else
+                                throw new IllegalStateException("不支持");
+                        } else {
+                            throw new IllegalStateException("不支持");
                         }
                     }
                     break;
                     case Square: {
                         Variable x = current.dependencies[0];
-                        if (INDArray.class.isInstance(current.data)) {
-                            INDArray x_data = (INDArray) x.data;
-                            x.grad = ((INDArray) x.grad).add(x_data.mul(2).mul((INDArray) current.grad));
+                        if (current.data.type > Tensor.SCALAR_TYPE) {
+                            INDArray x_data = x.data.tensor;
+                            INDArray grad = x.grad.tensor.add(x_data.mul(2).mul(current.grad.tensor));
+                            x.grad = new Tensor(grad);
                             if (--x.backward == 0) {
                                 variables.add(x);
                             }
-                        }
-                        if (Double.class.isInstance(current.data)) {
-                            x.grad = (Double) x.grad + ((Double) x.data) * 2 * ((Double) current.grad);
+                        } else if (current.data.type == Tensor.SCALAR_TYPE) {
+                            x.grad = new Tensor(x.grad.scalar + x.data.scalar * 2 * current.grad.scalar);
                             if (--x.backward == 0) {
                                 variables.add(x);
                             }
+                        } else {
+                            throw new IllegalStateException("不支持");
                         }
                     }
                     break;
                     case MatMul: {
-                        Variable x = current.dependencies[0];
-                        Variable y = current.dependencies[1];
-                        y.grad = ((INDArray) y.grad).add(((INDArray) x.data).transpose().mmul((INDArray) current.grad));
-                        x.grad = ((INDArray) x.grad).add(((INDArray) current.grad).mmul(((INDArray) y.data).transpose()));
-                        if (--x.backward == 0) {
-                            variables.add(x);
-                        }
-                        if (--y.backward == 0) {
-                            variables.add(y);
+                        if (current.data.type > Tensor.SCALAR_TYPE) {
+                            Variable x = current.dependencies[0];
+                            Variable y = current.dependencies[1];
+                            y.grad = new Tensor(y.grad.tensor.add((x.data.tensor.transpose().mmul(current.grad.tensor))));
+                            x.grad = new Tensor(x.grad.tensor.add(current.grad.tensor.mmul((y.data.tensor.transpose()))));
+                            if (--x.backward == 0) {
+                                variables.add(x);
+                            }
+                            if (--y.backward == 0) {
+                                variables.add(y);
+                            }
+                        } else {
+                            throw new IllegalStateException("非法");
                         }
                     }
                     break;
                     case Sigmoid: {
-                        if (INDArray.class.isInstance(current.data)) {
+                        if (current.data.type > Tensor.SCALAR_TYPE) {
                             Variable x = current.dependencies[0];
-                            INDArray x_data = (INDArray) current.dependencies[0].data;
+                            INDArray x_data = current.dependencies[0].data.tensor;
                             INDArray x_data_c = Nd4j.create(x_data.shape());
                             Nd4j.copy(x_data, x_data_c);
-                            x.grad = ((INDArray) x.grad).add(Activation.SIGMOID.getActivationFunction().backprop(x_data_c, (INDArray) current.grad).getFirst());
+                            x.grad = new Tensor(x.grad.tensor.add(Activation.SIGMOID.getActivationFunction().backprop(x_data_c, current.grad.tensor).getFirst()));
                             if (--x.backward == 0) {
                                 variables.add(x);
                             }
-                        }
-                        if (Double.class.isInstance(current.data)) {
+                        } else if (current.data.type == Tensor.SCALAR_TYPE) {
                             Variable y = current.dependencies[0];
-                            Double x = (Double) y.data;
-                            y.grad = (Double) y.grad + mathSigmoid(x) * (1 - mathSigmoid(x));
+                            double x = y.data.scalar;
+                            y.grad = new Tensor(y.grad.scalar + mathSigmoid(x) * (1 - mathSigmoid(x)));
                             if (--y.backward == 0) {
                                 variables.add(y);
                             }
+                        } else {
+                            throw new IllegalStateException("不支持");
                         }
                     }
                     break;
                     case TanH: {
-                        if (INDArray.class.isInstance(current.data)) {
+                        if (current.data.type > Tensor.SCALAR_TYPE) {
                             Variable x = current.dependencies[0];
-                            INDArray x_data = (INDArray) x.data;
+                            INDArray x_data = x.data.tensor;
                             INDArray x_data_c = Nd4j.zeros(x_data.shape());
                             Nd4j.copy(x_data, x_data_c);
-                            x.grad = ((INDArray) x.grad).add(Activation.TANH.getActivationFunction().backprop(x_data_c, (INDArray) current.grad).getFirst());
+                            x.grad = new Tensor
+                                    (x.grad.tensor.add(Activation.TANH.getActivationFunction().backprop(x_data_c, current.grad.tensor).getFirst()));
                             if (--x.backward == 0) {
                                 variables.add(x);
                             }
-                        }
-                        if (Double.class.isInstance(current.data)) {
+                        }else
+                        if (current.data.type == Tensor.SCALAR_TYPE) {
                             Variable y = current.dependencies[0];
-                            Double x = (Double) y.data;
-                            y.grad = (Double) y.grad + (1 - Math.pow(mathTanh(x), 2));
+                            double x = y.data.scalar;
+                            y.grad = new Tensor(y.grad.scalar + (1 - Math.pow(mathTanh(x), 2)));
                             if (--y.backward == 0) {
                                 variables.add(y);
                             }
+                        }else {
+                            throw new IllegalStateException("不支持");
                         }
                     }
                     break;
                     case RELU: {
-                        if (INDArray.class.isInstance(current.data)) {
+                        if (current.data.type > Tensor.SCALAR_TYPE) {
                             Variable x = current.dependencies[0];
-                            INDArray x_data = (INDArray) x.data;
+                            INDArray x_data = x.data.tensor;
                             INDArray x_data_cpp = Nd4j.create(x_data.shape());
                             Nd4j.copy(x_data, x_data_cpp);
-                            x.grad = ((INDArray) x.grad).add(Activation.RELU.getActivationFunction().backprop(x_data_cpp, (INDArray) current.grad).getFirst());
+                            x.grad = new Tensor(x.grad.tensor.add(Activation.RELU.getActivationFunction().backprop(x_data_cpp, current.grad.tensor).getFirst()));
                             if (--x.backward == 0) {
                                 variables.add(x);
                             }
-                        }
-                        if (Double.class.isInstance(current.data)) {
+                        }else
+                        if (current.data.type == Tensor.SCALAR_TYPE) {
                             Variable y = current.dependencies[0];
-                            Double x = (Double) y.data;
-                            y.grad = (Double) y.grad + (x >= 0 ? 1 : 0);
+                            double x = y.data.scalar;
+                            y.grad = new Tensor(y.grad.scalar + (x >= 0 ? 1 : 0));
                             if (--y.backward == 0) {
                                 variables.add(y);
                             }
+                        }else {
+                            throw new IllegalStateException("不支持");
                         }
                     }
                     break;
-                    case AddVec:{
+                    case AddVec: {
 
                         Variable x = current.dependencies[0];
                         Variable y = current.dependencies[1];
-                        INDArray c_grad = (INDArray) current.grad;
-                        INDArray x_data = (INDArray) x.data;
+                        INDArray c_grad = current.grad.tensor;
+                        INDArray x_data = x.data.tensor;
 
-                        INDArray oneColumn = Nd4j.ones(new int[]{1,x_data.shape()[0]});
+                        INDArray oneColumn = Nd4j.ones(new int[]{1, x_data.shape()[0]});
                         INDArray vecGradMat = oneColumn.mmul(c_grad);
-                        x.grad = ((INDArray)x.grad).add(c_grad);
-                        y.grad = ((INDArray)y.grad).add(vecGradMat.getRow(0));
+                        x.grad = new Tensor(x.grad.tensor.add(c_grad));
+                        y.grad = new Tensor(y.grad.tensor.add(vecGradMat.getRow(0)));
 
                         if (--y.backward == 0) {
                             variables.add(y);
@@ -260,12 +279,54 @@ public class Toolkit {
                         if (--x.backward == 0) {
                             variables.add(x);
                         }
+                    }
+                    break;
+                    case MulScalar: {
+                        INDArray current_grad = current.grad.tensor;
+                        Variable x = current.dependencies[0];
+                        Variable y = current.dependencies[1];
+                        INDArray x_data = x.data.tensor;
+                        double y_data = y.data.scalar;
+                        y.grad = new Tensor(y.grad.scalar + x_data.mul(current_grad).sumNumber().doubleValue());
+                        x.grad = new Tensor(x.grad.tensor.add(current_grad.mul(y_data)));
+                        if (--y.backward == 0) {
+                            variables.add(y);
+                        }
+                        if (--x.backward == 0) {
+                            variables.add(x);
+                        }
+                    }
+                    break;
+                    case Hadamard: {
+                        INDArray current_gradient = current.grad.tensor;
+                        Variable x = current.dependencies[0];
+                        Variable y = current.dependencies[1];
+                        INDArray x_data = x.data.tensor;
+                        INDArray y_data = y.data.tensor;
+                        x.grad = new Tensor(x.grad.tensor.add(current_gradient.mul(y_data)));
+                        y.grad = new Tensor(y.grad.tensor.add(current_gradient.mul(x_data)));
+                        if (--y.backward == 0) {
+                            variables.add(y);
+                        }
+                        if (--x.backward == 0) {
+                            variables.add(x);
+                        }
+                    }
+                    case ASSIGN: {
+
+                    }
+                    break;
+                    case Dot: {
+                        throw new UnsupportedOperationException("不支持点积的反射传播！");
+                    }
+                    case Kronecker: {
+                        throw new UnsupportedOperationException("还未实现！");
                     }
                 }
             }
             return;
         }
-        throw new IllegalStateException("不支持反向传播的类型[" + variable.data.getClass().getName() + "]");
+        throw new IllegalStateException("不支持反向传播的类型[" + variable.data.type + "]");
     }
 
 }
