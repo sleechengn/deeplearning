@@ -11,13 +11,15 @@ public class NNModule {
     private Variable layer2weights;
     private Variable layer2bias;
     private Toolkit tool;
-    private double learningspeed = 0.1;
+    private double learningSpeed;
+
     public NNModule() {
         tool = new Toolkit();
         layer1weights = new Variable(Nd4j.randn(new int[]{4, 3}));
         layer1bias = new Variable(Nd4j.create(new double[]{0, 0, 0}));
         layer2weights = new Variable(Nd4j.randn(new int[]{3, 2}));
         layer2bias = new Variable(Nd4j.create(new double[]{0, 0}));
+        learningSpeed = 0.01D;
     }
 
     public void train(Variable x, Variable y) {
@@ -29,10 +31,10 @@ public class NNModule {
         tool.backward(out);
 
         //权重自身调整，减梯度乘学习率
-        layer1weights.data.tensor.subi(layer1weights.grad.tensor.mul(learningspeed));
-        layer1bias.data.tensor.subi(layer1bias.grad.tensor.mul(learningspeed));
-        layer2weights.data.tensor.subi(layer2weights.grad.tensor.mul(learningspeed));
-        layer2bias.data.tensor.subi(layer2bias.grad.tensor.mul(learningspeed));
+        layer1weights.data.tensor.subi(layer1weights.grad.tensor.mul(learningSpeed));
+        layer1bias.data.tensor.subi(layer1bias.grad.tensor.mul(learningSpeed));
+        layer2weights.data.tensor.subi(layer2weights.grad.tensor.mul(learningSpeed));
+        layer2bias.data.tensor.subi(layer2bias.grad.tensor.mul(learningSpeed));
     }
 
     public Variable forward(Variable x) {
